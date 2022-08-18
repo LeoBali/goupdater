@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"os/user"
 
 	//"strings"
 	"time"
@@ -177,6 +178,7 @@ func init() {
 }
 
 func main() {
+
 	hwnd, err := createMainWindow()
 	if err != nil {
 		panic(err)
@@ -205,8 +207,14 @@ func main() {
 	urlChan = make(chan string)
 
 	go func(url chan string) {
+		var uid string
+		user, err := user.Current()
+		if err == nil {
+			uid = user.Uid
+		}
+		//fmt.Println(user.Uid);
 		ver, apps := GetVerAndApps()
-		count, link := Update(ver, apps)
+		count, link := Update(ver, apps, uid)
 		if count > 0 {
 			if count == 1 {
 				ti.ShowBalloonNotification("Updater", "You have 1 new update")

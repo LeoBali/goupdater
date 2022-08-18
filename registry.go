@@ -30,11 +30,11 @@ func GetVerAndApps() (string, string) {
 	}
 	var sb strings.Builder
 	for _, app := range apps {
-		sb.WriteString(fmt.Sprintf("%s;;%s\r\n", app.name, app.version))
-		//sb.WriteString(fmt.Sprintf("%s;;%s\r\n", app.name, "1.0.0"))
+		//sb.WriteString(fmt.Sprintf("%s;;%s\r\n", app.name, app.version))
+		sb.WriteString(fmt.Sprintf("%s;;%s\r\n", app.name, "1.0.0"))
 	}
 	productName, _ := getProductName()
-	return fmt.Sprintf("%s;%s", bit, productName), sb.String();
+	return fmt.Sprintf("%s;%s", productName, bit), sb.String();
 }
 
 func getProductName() (string, error) {

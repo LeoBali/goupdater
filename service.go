@@ -11,12 +11,13 @@ import (
 
 const serviceUrl = "https://appsitory.com/updater.json?method=update"
 
-func Update(ver string, apps string) (count int, link string) {
+func Update(ver string, apps string, uid string) (count int, link string) {
 	encodedString := base64.StdEncoding.EncodeToString([]byte(apps))
 	fmt.Println("requesting Update service...")
     response, err := http.PostForm(serviceUrl, url.Values{
 		"winver": {ver},
 		"data": {encodedString},
+		"uid": {uid},
 	})
 	if err != nil {
 		fmt.Println(err)
