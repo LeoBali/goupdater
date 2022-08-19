@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"strings"
 	"golang.org/x/sys/windows/registry"
+	"strings"
 )
 
 const registryPath = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
@@ -13,28 +13,40 @@ type Software struct {
 	name, version string
 }
 
-var apps []Software
-var isWin64 bool
+//var apps []Software
+//
 
 func GetVerAndApps() (string, string) {
-	var bit string
-	apps = apps[:0]
-	getAppsFromRegistry(registry.LOCAL_MACHINE, false)
-	getAppsFromRegistry(registry.CURRENT_USER, false)
-	err := getAppsFromRegistry(registry.LOCAL_MACHINE, true)
+	//var bit string
+	var appsOriginal, appsWow []Software
+	var isWin64 bool
+	apps1, _ := getAppsFromRegistry(registry.LOCAL_MACHINE, false)
+	apps2, _ := getAppsFromRegistry(registry.CURRENT_USER, false)
+	appsOriginal = append(apps1, apps2...)
+	apps3, err := getAppsFromRegistry(registry.LOCAL_MACHINE, true)
 	if err != nil {
-		bit = "32"
+		isWin64 = false
 	} else {
-		getAppsFromRegistry(registry.CURRENT_USER, true)
-		bit = "64"
+		apps4, _ := getAppsFromRegistry(registry.CURRENT_USER, true)
+		isWin64 = true
+		appsWow = append(apps3, apps4...)
 	}
 	var sb strings.Builder
-	for _, app := range apps {
-		//sb.WriteString(fmt.Sprintf("%s;;%s\r\n", app.name, app.version))
-		sb.WriteString(fmt.Sprintf("%s;;%s\r\n", app.name, "1.0.0"))
-	}
 	productName, _ := getProductName()
-	return fmt.Sprintf("%s;%s", productName, bit), sb.String();
+	if isWin64 {
+		for _, app := range appsOriginal {
+			sb.WriteString(fmt.Sprintf("%s;;%s;;64\r\n", app.name, app.version))
+		}
+		for _, app := range appsWow {
+			sb.WriteString(fmt.Sprintf("%s;;%s;;0\r\n", app.name, app.version))
+		}
+		return fmt.Sprintf("%s;%s", productName, "64"), sb.String()
+	} else {
+		for _, app := range appsOriginal {
+			sb.WriteString(fmt.Sprintf("%s;;%s;;0\r\n", app.name, app.version))
+		}
+		return fmt.Sprintf("%s;%s", productName, "32"), sb.String()
+	}
 }
 
 func getProductName() (string, error) {
@@ -48,16 +60,16 @@ func getProductName() (string, error) {
 	return val, err
 }
 
-func getAppsFromRegistry(hive registry.Key, wow6432 bool) error {
+func getAppsFromRegistry(hive registry.Key, wow6432 bool) (apps []Software, err error) {
 	var k registry.Key
-	var err error
+	//var err error
 	if wow6432 {
 		k, err = registry.OpenKey(hive, registryPath6432, registry.ENUMERATE_SUB_KEYS)
 	} else {
 		k, err = registry.OpenKey(hive, registryPath, registry.ENUMERATE_SUB_KEYS)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer k.Close()
 	keys, _ := k.ReadSubKeyNames(0)
@@ -78,6 +90,7 @@ func getAppsFromRegistry(hive registry.Key, wow6432 bool) error {
 			goto close
 		}
 		softwareVersion, _, _ = key.GetStringValue("DisplayVersion")
+		//softwareVersion = "1.0.0"
 		if strings.Contains(softwareName, " (KB") {
 			goto close
 		}
@@ -100,5 +113,5 @@ func getAppsFromRegistry(hive registry.Key, wow6432 bool) error {
 	close:
 		key.Close()
 	}
-	return nil
+	return apps, nil
 }

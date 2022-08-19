@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -33,7 +34,7 @@ func menuShow(hWndParent uintptr) {
 	x, y := GetCursorPos()
 	SetForegroundWindow(hWndParent)
 	if !TrackPopupMenu(hMenu, TPM_LEFTALIGN, x, y, hWndParent) {
-		fmt.Println("track popup menu failed")
+		log.Println("track popup menu failed")
 	}
 	PostMessage(hWndParent, 0, 0, 0)
 }
@@ -43,20 +44,20 @@ func wndProc(hWnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 	case WM_COMMAND:
 		switch nmsg := LOWORD(uint32(wParam)); nmsg {
 		case QuitMsg:
+			log.Println("quit from tray menu")
 			ti.Dispose()
 			os.Exit(0)
 		}
 	case TrayIconMsg:
 		switch nmsg := LOWORD(uint32(lParam)); nmsg {
 		case NIN_BALLOONUSERCLICK:
-			//fmt.Println("user clicked the balloon notification")
+			log.Println("user clicked the balloon notification")
 			url := <-urlChan
+			log.Printf("opening url %s", url)
 			exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 		case WM_CONTEXTMENU:
 			menuShow(hWnd)
 			return 0
-			// case WM_LBUTTONDOWN:
-			// 	fmt.Println("user clicked the tray icon")
 		}
 	case WM_DESTROY:
 		PostQuitMessage(0)
@@ -178,10 +179,10 @@ func init() {
 }
 
 func main() {
-
+	log.Println("starting updater")
 	hwnd, err := createMainWindow()
 	if err != nil {
-		panic(err)
+		log.Fatalf("error in createMainWindow %s\r\n", err)
 	}
 
 	icon, err := LoadImage(
@@ -192,12 +193,12 @@ func main() {
 		0,
 		LR_DEFAULTSIZE|LR_LOADFROMFILE)
 	if err != nil {
-		panic(err)
+		log.Fatalf("error in loadImage %s\r\n", err)
 	}
 
 	ti, err = NewTrayIcon(hwnd)
 	if err != nil {
-		panic(err)
+		log.Fatalf("error in createMainWindow %s\r\n", err)
 	}
 	defer ti.Dispose()
 
@@ -212,7 +213,7 @@ func main() {
 		if err == nil {
 			uid = user.Uid
 		}
-		//fmt.Println(user.Uid);
+		log.Printf("user id: %s\r\n", user.Uid);
 		ver, apps := GetVerAndApps()
 		count, link := Update(ver, apps, uid)
 		if count > 0 {
@@ -230,7 +231,7 @@ func main() {
 	var msg MSG
 	for {
 		if r, err := GetMessage(&msg, 0, 0, 0); err != nil {
-			panic(err)
+			log.Fatalf("error in getMessage %s\r\n", err)
 		} else if r == 0 {
 			break
 		}
