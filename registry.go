@@ -2,12 +2,16 @@ package main
 
 import (
 	"fmt"
-	"golang.org/x/sys/windows/registry"
+	"log"
 	"strings"
+
+	"golang.org/x/sys/windows/registry"
 )
 
-const registryPath = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
-const registryPath6432 = "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+const myRegistryPath = "Software\\Appsitory Updater"
+const firststartValue = "firststart"
+const uninstallRegistryPath = "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
+const uninstallRegistryPath6432 = "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall"
 
 type Software struct {
 	name, version string
@@ -49,9 +53,34 @@ func GetVerAndApps() (string, string) {
 	}
 }
 
+func ReadFirstStart() bool {
+	k, err := registry.OpenKey(registry.CURRENT_USER, myRegistryPath, registry.ALL_ACCESS)
+	if err != nil {
+		log.Printf("cannot open registry key %s, creating new", myRegistryPath)
+		k, openedExisting, err := registry.CreateKey(registry.CURRENT_USER, myRegistryPath, registry.ALL_ACCESS)
+		if err != nil {
+			log.Printf("error creating registry key %v", err)
+			return false
+		}
+		if openedExisting {
+			log.Println("opened existing registry path ?")
+		}
+		k.SetDWordValue(firststartValue, 0)
+		return true
+	}
+	value, _, err := k.GetIntegerValue(firststartValue)
+	if err != nil {
+		log.Printf("cannot read registry value %s %v", firststartValue, err)
+		return false
+	}
+	if value == 1 {
+		k.SetDWordValue(firststartValue, 0)
+		return true
+	}
+	return false
+}
+
 func getProductName() (string, error) {
-	// final key = Registry.openPath(RegistryHive.localMachine, path: "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion");
-	// productName = key.getValueAsString("ProductName");
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", registry.QUERY_VALUE)
 	if err != nil {
 		return "", err
@@ -64,9 +93,9 @@ func getAppsFromRegistry(hive registry.Key, wow6432 bool) (apps []Software, err 
 	var k registry.Key
 	//var err error
 	if wow6432 {
-		k, err = registry.OpenKey(hive, registryPath6432, registry.ENUMERATE_SUB_KEYS)
+		k, err = registry.OpenKey(hive, uninstallRegistryPath6432, registry.ENUMERATE_SUB_KEYS)
 	} else {
-		k, err = registry.OpenKey(hive, registryPath, registry.ENUMERATE_SUB_KEYS)
+		k, err = registry.OpenKey(hive, uninstallRegistryPath, registry.ENUMERATE_SUB_KEYS)
 	}
 	if err != nil {
 		return nil, err
@@ -78,9 +107,9 @@ func getAppsFromRegistry(hive registry.Key, wow6432 bool) (apps []Software, err 
 		var softwareName, softwareVersion, systemComponent string
 		var iSystemComponent uint64
 		if wow6432 {
-			key, err = registry.OpenKey(hive, registryPath6432+"\\"+name, registry.QUERY_VALUE)
+			key, err = registry.OpenKey(hive, uninstallRegistryPath6432+"\\"+name, registry.QUERY_VALUE)
 		} else {
-			key, err = registry.OpenKey(hive, registryPath+"\\"+name, registry.QUERY_VALUE)
+			key, err = registry.OpenKey(hive, uninstallRegistryPath+"\\"+name, registry.QUERY_VALUE)
 		}
 		if err != nil {
 			goto close

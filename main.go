@@ -23,10 +23,6 @@ func (mw *UpdaterWindow) addNotifyIcon() {
 		log.Fatal(err)
 	}
 
-	icon, err := walk.Resources.Image("updater.ico")
-	if err != nil {
-		log.Fatal(err)
-	}
 	mw.SetIcon(icon)
 	mw.ni.SetIcon(icon)
 	mw.ni.SetToolTip("Appsitory Updater")
@@ -107,13 +103,64 @@ type UpdaterWindow struct {
 
 func settings(owner walk.Form) {
 	Dialog{
-		Title: "Settings",
+		FixedSize: true,
+		Icon: icon,
+		Title:   "Settings",
+		MinSize: Size{Width: 400, Height: 250},
+		Font:    Font{Family: "Segoe UI", PointSize: 10},
+		Layout:  VBox{},
+		Children: []Widget{
+			GroupBox{
+				Title:  "Automatic Update",
+				Layout: VBox{},
+				Children: []Widget{
+					CheckBox{
+						Text:      "Notify me when new version of Update Detector is available",
+						Alignment: AlignHNearVCenter,
+						MinSize: Size{Width: 400},
+					},
+					CheckBox{
+						Text:      "Automatically update to the last version",
+						Checked:   true,
+						Alignment: AlignHNearVCenter,
+						MinSize: Size{Width: 400},
+					},
+				},
+				MinSize: Size{Width: 400},
+				Alignment: AlignHNearVCenter,
+			},
+			VSpacer{
+				Size:       8,
+			},
+			GroupBox{
+				Title:  "Windows Starts",
+				Layout: VBox{},
+				Children: []Widget{
+					CheckBox{
+						Text:      "Run Software Update when Windows starts",
+						Checked:   true,
+						Alignment: AlignHNearVCenter,
+						MinSize: Size{Width: 400},
+					},
+				},
+				MinSize: Size{Width: 400},
+				Alignment: AlignHNearVCenter,
+			},
+		},
 	}.Run(owner)
 }
 
+var icon walk.Image
+
 func main() {
+	var err error
+	icon, err = walk.Resources.Image("updater.ico")
+	if err != nil {
+		log.Fatal(err)
+	}
 	uw := new(UpdaterWindow)
 	MainWindow{
+		Visible: false,
 		AssignTo: &uw.MainWindow,
 		Title:    "Appsitory Updater (Beta)",
 		Size:     Size{Width: 420, Height: 180},
@@ -124,8 +171,8 @@ func main() {
 				Layout: Grid{Columns: 2},
 				Children: []Widget{
 					TextLabel{
-						AssignTo: &uw.label,
-						Text: "Scanning computer...",
+						AssignTo:   &uw.label,
+						Text:       "Scanning computer...",
 						ColumnSpan: 1,
 					},
 					LinkLabel{
@@ -187,6 +234,14 @@ func main() {
 	uw.hideButtons()
 	uw.centerWindow()
 	uw.interceptWndProc()
+
+	isFirstStart := ReadFirstStart()
+	if (isFirstStart) {
+		log.Println("first start")
+	} else {
+		log.Println("not a first start")
+		uw.SetVisible(false)
+	}
 
 	go func() {
 		uw.label.SetText("Scanning computer...")
