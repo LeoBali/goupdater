@@ -3,24 +3,20 @@ package main
 import (
 	"fmt"
 	"log"
+	"syscall"
+
 	// "os"
+	"os/user"
+	"time"
+
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
-	"os/user"
-	"time"
 )
 
-const (
-	SIZE_W = 420
-	SIZE_H = 180
-)
+//const appIconResID = 7
 
-const appIconResID = 7
-
-//var Link string
-
-func (mw *UpdaterWindow) AddNotifyIcon() {
+func (mw *UpdaterWindow) addNotifyIcon() {
 	var err error
 	mw.ni, err = walk.NewNotifyIcon(mw)
 	if err != nil {
@@ -60,15 +56,59 @@ func (mw *UpdaterWindow) removeStyle(style int32) {
 	win.SetWindowLong(mw.hWnd, win.GWL_STYLE, currStyle&style)
 }
 
+func (uw *UpdaterWindow) hideButtons() {
+	uw.removeStyle(^win.WS_SIZEBOX)
+	uw.removeStyle(^win.WS_MINIMIZEBOX)
+	uw.removeStyle(^win.WS_MAXIMIZEBOX)
+	//hMenu := win.GetSystemMenu(mw.hWnd, false)
+	//win.RemoveMenu(hMenu, win.SC_CLOSE, win.MF_BYCOMMAND)
+}
+
+func (uw *UpdaterWindow) interceptWndProc() {
+	var prevWndProcPtr uintptr
+	prevWndProcPtr = win.SetWindowLongPtr(uw.hWnd, win.GWL_WNDPROC,
+		syscall.NewCallback(func(hWnd win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
+			if msg == win.WM_CLOSE {
+				win.ShowWindow(hWnd, win.SW_HIDE)
+				return 0
+			}
+			return win.CallWindowProc(prevWndProcPtr, hWnd, msg, wParam, lParam)
+		}))
+}
+
+func (uw *UpdaterWindow) centerWindow() {
+	var rect win.RECT
+	win.GetWindowRect(uw.hWnd, &rect)
+	width := rect.Right - rect.Left
+	height := rect.Bottom - rect.Top
+	xScreen := win.GetSystemMetrics(win.SM_CXSCREEN)
+	yScreen := win.GetSystemMetrics(win.SM_CYSCREEN)
+	win.SetWindowPos(
+		uw.hWnd,
+		0,
+		(xScreen-width)/2,
+		(yScreen-height)/2,
+		width,
+		height,
+		win.SWP_FRAMECHANGED,
+	)
+}
+
 type UpdaterWindow struct {
 	*walk.MainWindow
-	hWnd win.HWND
-	ni   *walk.NotifyIcon
-	pb	*walk.ProgressBar
-	label *walk.TextLabel
-	lnkCancel *walk.LinkLabel
+	hWnd        win.HWND
+	ni          *walk.NotifyIcon
+	pb          *walk.ProgressBar
+	label       *walk.TextLabel
+	lnkCancel   *walk.LinkLabel
 	lnkReadMore *walk.LinkLabel
-	lnkRescan *walk.LinkLabel
+	lnkRescan   *walk.LinkLabel
+}
+
+func settings(owner walk.Form) {
+	Dialog{
+		Title: "Settings",
+	}.Run(owner)
 }
 
 func main() {
@@ -76,123 +116,77 @@ func main() {
 	MainWindow{
 		AssignTo: &uw.MainWindow,
 		Title:    "Appsitory Updater (Beta)",
-		Size:     Size{Width: SIZE_W, Height: SIZE_H},
+		Size:     Size{Width: 420, Height: 180},
 		Font:     Font{Family: "Segoe UI", PointSize: 10},
 		Layout:   VBox{},
 		Children: []Widget{
 			Composite{
 				Layout: Grid{Columns: 2},
-				Children: []Widget {
+				Children: []Widget{
 					TextLabel{
 						AssignTo: &uw.label,
-						//Text: "Scanning computer...",
+						Text: "Scanning computer...",
 						ColumnSpan: 1,
 					},
 					LinkLabel{
 						AssignTo: &uw.lnkRescan,
-						Text: `<a id="this" href="#">Rescan</a>`,
+						Text:     `<a id="this" href="#">Rescan</a>`,
 						OnLinkActivated: func(link *walk.LinkLabelLink) {
 							log.Printf("id: '%s', url: '%s'\n", link.Id(), link.URL())
 						},
 						Alignment: AlignHFarVNear,
-						Visible: false,
+						Visible:   false,
 					},
 					VSpacer{
-					 	ColumnSpan: 2,
-					 	Size:       8,
+						ColumnSpan: 2,
+						Size:       8,
 					},
 					LinkLabel{
 						AssignTo: &uw.lnkReadMore,
-						Text: `<a id="this" href="#">View results...</a>`,
+						Text:     `<a id="this" href="#">View results...</a>`,
 						OnLinkActivated: func(link *walk.LinkLabelLink) {
 							log.Printf("id: '%s', url: '%s'\n", link.Id(), link.URL())
 						},
-						Alignment: AlignHNearVNear,
+						Alignment:  AlignHNearVNear,
 						ColumnSpan: 2,
-						Visible: false,
+						Visible:    false,
 					},
 					ProgressBar{
 						AssignTo: &uw.pb,
 						MinValue: 0,
 						Value:    50,
 						MaxValue: 100,
-						MaxSize: Size{Height: 20},
+						MaxSize:  Size{Height: 20},
 					},
 					LinkLabel{
 						AssignTo: &uw.lnkCancel,
-						Text: `<a id="this" href="#">Cancel</a>`,
+						Text:     `<a id="this" href="#">Cancel</a>`,
 						OnLinkActivated: func(link *walk.LinkLabelLink) {
 							log.Printf("id: '%s', url: '%s'\n", link.Id(), link.URL())
 						},
 					},
 					VSpacer{
-					 	ColumnSpan: 2,
-					 	Size:       8,
+						ColumnSpan: 2,
+						Size:       8,
 					},
 					LinkLabel{
 						Text: `<a id="this" href="#">Settings</a>`,
 						OnLinkActivated: func(link *walk.LinkLabelLink) {
-							log.Printf("id: '%s', url: '%s'\n", link.Id(), link.URL())
+							settings(uw)
+							//log.Printf("id: '%s', url: '%s'\n", link.Id(), link.URL())
 						},
-						Alignment: AlignHNearVNear,
+						Alignment:  AlignHNearVNear,
 						ColumnSpan: 2,
 					},
 				},
 			},
 		},
-		/*Children: []Widget{
-			HSpacer{},
-			TextLabel{
-				Text: "Scanning computer...",
-			},
-			HSpacer{},
-			HSplitter{
-				MaxSize: Size{Width: 100, Height: 20},
-				Children: []Widget{
-					ProgressBar{
-						MinValue: 0,
-						Value:    50,
-						MaxValue: 100,
-					},
-					HSpacer{Size: 30},
-					LinkLabel{
-						Text: `<a id="this" href="#">Cancel</a>`,
-						OnLinkActivated: func(link *walk.LinkLabelLink) {
-							log.Printf("id: '%s', url: '%s'\n", link.Id(), link.URL())
-						},
-					},
-				},
-			},
-			HSpacer{},
-			LinkLabel{
-				Text: `<a id="this" href="#">Settings</a>`,
-				OnLinkActivated: func(link *walk.LinkLabelLink) {
-					log.Printf("id: '%s', url: '%s'\n", link.Id(), link.URL())
-				},
-				Alignment: AlignHNearVNear,
-			},
-			HSpacer{},
-		},*/
 	}.Create()
 	uw.hWnd = uw.Handle()
-	uw.AddNotifyIcon()
-	uw.removeStyle(^win.WS_SIZEBOX)
-	//mw.removeStyle(^win.WS_MINIMIZEBOX)
-	uw.removeStyle(^win.WS_MAXIMIZEBOX)
-	//hMenu := win.GetSystemMenu(mw.hWnd, false)
-	//win.RemoveMenu(hMenu, win.SC_CLOSE, win.MF_BYCOMMAND)
-	/*
-			xScreen := win.GetSystemMetrics(win.SM_CXSCREEN);
-		    yScreen := win.GetSystemMetrics(win.SM_CYSCREEN);
-		    win.SetWindowPos(
-		        mw.Handle(),
-		        0,
-		        (xScreen - SIZE_W)/2,
-		        (yScreen - SIZE_H)/2,
-		        SIZE_W,
-		        SIZE_H,
-		        win.SWP_FRAMECHANGED,
-		    )*/
+	uw.addNotifyIcon()
+	uw.hideButtons()
+	uw.centerWindow()
+	uw.interceptWndProc()
 
 	go func() {
 		uw.label.SetText("Scanning computer...")
@@ -203,8 +197,8 @@ func main() {
 		uw.label.SetText("Sending data for analysis...")
 		uw.pb.SetValue(75)
 		time.Sleep(1 * time.Second)
-		uw.label.SetText("Opening results...")	
-		uw.pb.SetValue(99)	
+		uw.label.SetText("Opening results...")
+		uw.pb.SetValue(99)
 		time.Sleep(1 * time.Second)
 		uw.label.SetText("You have 12 new updates available.")
 		uw.pb.SetVisible(false)
