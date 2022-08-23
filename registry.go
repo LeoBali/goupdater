@@ -90,7 +90,7 @@ func getAppsFromRegistry(hive registry.Key, wow6432 bool) (apps []Software, err 
 			goto close
 		}
 		softwareVersion, _, _ = key.GetStringValue("DisplayVersion")
-		softwareVersion = "1.0.0"
+		//softwareVersion = "1.0.0"
 		if strings.Contains(softwareName, " (KB") {
 			goto close
 		}
