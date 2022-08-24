@@ -33,18 +33,18 @@ func GetVerAndApps() (string, string) {
 	var appsOriginal, appsWow []Software
 	var isWin64 bool
 	apps1, _ := getAppsFromRegistry(registry.LOCAL_MACHINE, false)
-	log.Printf("read %v apps from %v: %v", len(apps1), registry.LOCAL_MACHINE, toString(apps1))
+	log.Printf("read %v apps from %v", len(apps1), registry.LOCAL_MACHINE)
 	apps2, _ := getAppsFromRegistry(registry.CURRENT_USER, false)
-	log.Printf("read %v apps from %v: %v", len(apps2), registry.CURRENT_USER, toString(apps2))
+	log.Printf("read %v apps from %v", len(apps2), registry.CURRENT_USER)
 	appsOriginal = append(apps1, apps2...)
 	apps3, err := getAppsFromRegistry(registry.LOCAL_MACHINE, true)
 	if err != nil {
 		log.Printf("error reading from %v wow6432. running on x86", registry.LOCAL_MACHINE)
 		isWin64 = false
 	} else {
-		log.Printf("read %v apps from %v wow6432: %v", len(apps3), registry.LOCAL_MACHINE, toString(apps3))
+		log.Printf("read %v apps from %v wow6432", len(apps3), registry.LOCAL_MACHINE)
 		apps4, _ := getAppsFromRegistry(registry.CURRENT_USER, true)
-		log.Printf("read %v apps from %v wow6432: %v", len(apps4), registry.CURRENT_USER, toString(apps4))
+		log.Printf("read %v apps from %v wow6432", len(apps4), registry.CURRENT_USER)
 		isWin64 = true
 		appsWow = append(apps3, apps4...)
 	}

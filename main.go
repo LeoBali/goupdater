@@ -27,6 +27,11 @@ func (mw *UpdaterWindow) addNotifyIcon() {
 	mw.ni.SetIcon(icon)
 	mw.ni.SetToolTip("Appsitory Updater")
 
+	mw.ni.MessageClicked().Attach(func() {
+		log.Println("balloon clicked")
+		OpenUrl(link)
+	})
+
 	visitAppsitory := walk.NewAction()
 	visitAppsitory.SetText("&Visit appsitory.com...")
 	visitAppsitory.Triggered().Attach(func() { OpenUrl(desktopUrl) })
@@ -60,10 +65,10 @@ func (mw *UpdaterWindow) addNotifyIcon() {
 	mw.ni.SetVisible(true)
 
 	mw.ni.MouseDown().Attach(func(x, y int, button walk.MouseButton) {
-		// if button == walk.LeftButton {
-		// 	mw.Show()
-		// 	win.ShowWindow(mw.Handle(), win.SW_RESTORE)
-		// }
+		if button == walk.LeftButton {
+			mw.Show()
+			win.ShowWindow(mw.Handle(), win.SW_RESTORE)
+		}
 	})
 
 }
@@ -88,6 +93,17 @@ func (uw *UpdaterWindow) interceptWndProc() {
 			if msg == win.WM_CLOSE {
 				win.ShowWindow(hWnd, win.SW_HIDE)
 				return 0
+			} else if msg == win.WM_APP+0 {
+				switch lParam {
+				case win.NIN_BALLOONSHOW:
+					log.Println("wnd proc NIN_BALLOONSHOW")
+				case win.NIN_BALLOONHIDE:
+					log.Println("wnd proc NIN_BALLOONHIDE")
+				case win.NIN_BALLOONTIMEOUT:
+					log.Println("wnd proc NIN_BALLOONTIMEOUT")
+				case win.NIN_BALLOONUSERCLICK:
+					log.Println("wnd proc NIN_BALLOONUSERCLICK")
+				}
 			}
 			return win.CallWindowProc(prevWndProcPtr, hWnd, msg, wParam, lParam)
 		}))
@@ -176,6 +192,7 @@ var link string
 var uw *UpdaterWindow
 var isScan bool
 var stop bool
+var uid string
 
 func main() {
 	var err error
@@ -192,6 +209,12 @@ func main() {
 		log.Println("not a first start")
 		//uw.SetVisible(false)
 	}
+
+	user, err := user.Current()
+	if err == nil {
+		uid = user.Uid
+	}
+	log.Printf("user id: %s\r\n", uid)
 
 	uw = new(UpdaterWindow)
 	children := []Widget{
@@ -245,15 +268,6 @@ func main() {
 					},
 					Alignment: AlignHFarVNear,
 				},
-				/* 				LinkLabel{
-					Text: `<a id="this" href="#">Settings</a>`,
-					OnLinkActivated: func(link *walk.LinkLabelLink) {
-						settings(uw)
-						//log.Printf("id: '%s', url: '%s'\n", link.Id(), link.URL())
-					},
-					Alignment:  AlignHNearVNear,
-					ColumnSpan: 2,
-				}, */
 			},
 		},
 	}
@@ -288,27 +302,29 @@ func main() {
 		go scan(true)
 	}
 
-	/*go func() {
-		time.Sleep(2 * time.Second)
-
-
+	go func() {
+		time.Sleep(1 * time.Minute)
+		log.Println("background check")
+		ver, apps := GetVerAndApps()
+		var count int
+		count, link, err = Update(ver, apps, uid)
+		if err != nil {
+			return
+		}
 		if count > 0 {
+			log.Println("showing balloon")
 			if count == 1 {
-				// Now that the icon is visible, we can bring up an info balloon.
-				if err := uw.ni.ShowInfo("We have found one update for your apps", "Click here to view details"); err != nil {
-					log.Fatal(err)
+				if err := uw.ni.ShowCustom("We have found one update for your apps", "Click here to view details", icon); err != nil {
+					log.Printf("error showing balloon %v", err)
 				}
 			} else {
-				// Now that the icon is visible, we can bring up an info balloon.
-				if err := uw.ni.ShowInfo(fmt.Sprintf("We have found %d updates for your apps", count), "Click here to view details"); err != nil {
-					log.Fatal(err)
+				if err := uw.ni.ShowCustom(fmt.Sprintf("We have found %d updates for your apps", count), "Click here to view details", icon); err != nil {
+					log.Printf("error showing balloon %v", err)
 				}
 			}
 		}
-		if err != nil {
-			log.Println(err)
-		}
-	}()*/
+
+	}()
 
 	uw.Run()
 }
@@ -334,16 +350,11 @@ func scan(openResults bool) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	var uid string
-	user, err := user.Current()
-	if err == nil {
-		uid = user.Uid
-	}
-	log.Printf("user id: %s\r\n", uid)
 	ver, apps := GetVerAndApps()
 	uw.label.SetText("Sending data for analysis...")
 	uw.pb.SetValue(75)
 	var count int
+	var err error
 	count, link, err = Update(ver, apps, uid)
 	time.Sleep(1 * time.Second)
 	if err != nil {
@@ -378,51 +389,3 @@ func scan(openResults bool) {
 		uw.label.SetText("You don't have any updates available.")
 	}
 }
-
-/*func mainOld() {
-	log.Println("Starting updater")
-	tray, err := New()
-	if err != nil {
-		log.Fatalf("error in new systray %s\r\n", err)
-	}
-
-	//err = tray.Show(appIconResID, "Updater")
-	err = tray.ShowCustom("updater.ico", "Updater")
-	if err != nil {
-		log.Fatalf("error in show systray %s\r\n", err)
-	}
-
-	// Append more menu items and use tray.AppendSeparator() to separate them.
-	tray.AppendMenu("Quit", func() {
-		fmt.Println("Quit")
-		os.Exit(0)
-	})
-
-	go func() {
-		time.Sleep(5 * time.Second)
-		var uid string
-		user, err := user.Current()
-		if err == nil {
-			uid = user.Uid
-		}
-		log.Printf("user id: %s\r\n", uid)
-		ver, apps := GetVerAndApps()
-		count, link := Update(ver, apps, uid)
-		tray.SetLink(link)
-		if count > 0 {
-			if count == 1 {
-				tray.ShowMessage("Updater", "You have 1 new update", false)
-			} else {
-				tray.ShowMessage("Updater", fmt.Sprintf("You have %d new updates", count), false)
-			}
-		}
-		if err != nil {
-			log.Println(err)
-		}
-	}()
-
-	err = tray.Run()
-	if err != nil {
-		log.Println(err)
-	}
-}*/
