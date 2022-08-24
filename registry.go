@@ -20,18 +20,31 @@ type Software struct {
 //var apps []Software
 //
 
+func toString(list [] Software) string {
+	var sb strings.Builder
+	for _, software := range list {
+		sb.WriteString(software.name + ", ")
+	}
+	return sb.String()
+}
+
 func GetVerAndApps() (string, string) {
 	//var bit string
 	var appsOriginal, appsWow []Software
 	var isWin64 bool
 	apps1, _ := getAppsFromRegistry(registry.LOCAL_MACHINE, false)
+	log.Printf("read %v apps from %v: %v", len(apps1), registry.LOCAL_MACHINE, toString(apps1))
 	apps2, _ := getAppsFromRegistry(registry.CURRENT_USER, false)
+	log.Printf("read %v apps from %v: %v", len(apps2), registry.CURRENT_USER, toString(apps2))
 	appsOriginal = append(apps1, apps2...)
 	apps3, err := getAppsFromRegistry(registry.LOCAL_MACHINE, true)
 	if err != nil {
+		log.Printf("error reading from %v wow6432. running on x86", registry.LOCAL_MACHINE)
 		isWin64 = false
 	} else {
+		log.Printf("read %v apps from %v wow6432: %v", len(apps3), registry.LOCAL_MACHINE, toString(apps3))
 		apps4, _ := getAppsFromRegistry(registry.CURRENT_USER, true)
+		log.Printf("read %v apps from %v wow6432: %v", len(apps4), registry.CURRENT_USER, toString(apps4))
 		isWin64 = true
 		appsWow = append(apps3, apps4...)
 	}
@@ -94,10 +107,11 @@ func getProductName() (string, error) {
 
 func getAppsFromRegistry(hive registry.Key, wow6432 bool) (apps []Software, err error) {
 	var k registry.Key
-	//var err error
 	if wow6432 {
+		log.Println(uninstallRegistryPath6432)
 		k, err = registry.OpenKey(hive, uninstallRegistryPath6432, registry.ENUMERATE_SUB_KEYS)
 	} else {
+		log.Println(uninstallRegistryPath)
 		k, err = registry.OpenKey(hive, uninstallRegistryPath, registry.ENUMERATE_SUB_KEYS)
 	}
 	if err != nil {
@@ -122,7 +136,7 @@ func getAppsFromRegistry(hive registry.Key, wow6432 bool) (apps []Software, err 
 			goto close
 		}
 		softwareVersion, _, _ = key.GetStringValue("DisplayVersion")
-		//softwareVersion = "1.0.0"
+		softwareVersion = "1.0.0"
 		if strings.Contains(softwareName, " (KB") {
 			goto close
 		}

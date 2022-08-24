@@ -36,16 +36,16 @@ func (mw *UpdaterWindow) addNotifyIcon() {
 
 	scanForUpdates := walk.NewAction()
 	scanForUpdates.SetText("Scan for &updates...")
-	scanForUpdates.Triggered().Attach(func() { 
+	scanForUpdates.Triggered().Attach(func() {
 		mw.Show()
 		win.ShowWindow(mw.Handle(), win.SW_RESTORE)
-		go scan()
+		go scan(false)
 	})
 	mw.ni.ContextMenu().Actions().Add(scanForUpdates)
 
 	settingsAction := walk.NewAction()
 	settingsAction.SetText("&Settings...")
-	settingsAction.Triggered().Attach(func() { 
+	settingsAction.Triggered().Attach(func() {
 		settings()
 	})
 	mw.ni.ContextMenu().Actions().Add(settingsAction)
@@ -113,23 +113,23 @@ func (uw *UpdaterWindow) centerWindow() {
 
 type UpdaterWindow struct {
 	*walk.MainWindow
-	hWnd        win.HWND
-	ni          *walk.NotifyIcon
-	pb          *walk.ProgressBar
-	label       *walk.TextLabel
-	lnkCancelRescan   *walk.LinkLabel
-	lnkReadMore *walk.LinkLabel
+	hWnd            win.HWND
+	ni              *walk.NotifyIcon
+	pb              *walk.ProgressBar
+	label           *walk.TextLabel
+	lnkCancelRescan *walk.LinkLabel
+	lnkReadMore     *walk.LinkLabel
 	//lnkRescan   *walk.LinkLabel
 }
 
 func settings() {
 	Dialog{
 		FixedSize: true,
-		Icon: icon,
-		Title:   "Settings",
-		MinSize: Size{Width: 400, Height: 250},
-		Font:    Font{Family: "Segoe UI", PointSize: 10},
-		Layout:  VBox{},
+		Icon:      icon,
+		Title:     "Settings",
+		MinSize:   Size{Width: 400, Height: 250},
+		Font:      Font{Family: "Segoe UI", PointSize: 10},
+		Layout:    VBox{},
 		Children: []Widget{
 			GroupBox{
 				Title:  "Automatic Update",
@@ -138,20 +138,20 @@ func settings() {
 					CheckBox{
 						Text:      "Notify me when new version of Update Detector is available",
 						Alignment: AlignHNearVCenter,
-						MinSize: Size{Width: 400},
+						MinSize:   Size{Width: 400},
 					},
 					CheckBox{
 						Text:      "Automatically update to the last version",
 						Checked:   true,
 						Alignment: AlignHNearVCenter,
-						MinSize: Size{Width: 400},
+						MinSize:   Size{Width: 400},
 					},
 				},
-				MinSize: Size{Width: 400},
+				MinSize:   Size{Width: 400},
 				Alignment: AlignHNearVCenter,
 			},
 			VSpacer{
-				Size:       8,
+				Size: 8,
 			},
 			GroupBox{
 				Title:  "Windows Starts",
@@ -161,10 +161,10 @@ func settings() {
 						Text:      "Run Software Update when Windows starts",
 						Checked:   true,
 						Alignment: AlignHNearVCenter,
-						MinSize: Size{Width: 400},
+						MinSize:   Size{Width: 400},
 					},
 				},
-				MinSize: Size{Width: 400},
+				MinSize:   Size{Width: 400},
 				Alignment: AlignHNearVCenter,
 			},
 		},
@@ -175,16 +175,17 @@ var icon walk.Image
 var link string
 var uw *UpdaterWindow
 var isScan bool
+var stop bool
 
 func main() {
 	var err error
-	icon, err = walk.Resources.Image("updater.ico")
+	icon, err = walk.Resources.Image("8") // 8 is an icon id
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	isFirstStart := ReadFirstStart()
-	if (isFirstStart) {
+	if isFirstStart {
 		log.Println("first start")
 		OpenUrl(firstOpenUrl)
 	} else {
@@ -199,18 +200,9 @@ func main() {
 			Children: []Widget{
 				TextLabel{
 					AssignTo:   &uw.label,
-					Text:       "Scanning computer...",
+					Text:       "Press Scan to start a scan",
 					ColumnSpan: 2,
 				},
-				// LinkLabel{
-				// 	AssignTo: &uw.lnkRescan,
-				// 	Text:     `<a id="this" href="#">Rescan</a>`,
-				// 	OnLinkActivated: func(link *walk.LinkLabelLink) {
-				// 		log.Printf("id: '%s', url: '%s'\n", link.Id(), link.URL())
-				// 	},
-				// 	Alignment: AlignHFarVNear,
-				// 	Visible:   false,
-				// },
 				VSpacer{
 					ColumnSpan: 2,
 					Size:       8,
@@ -220,20 +212,20 @@ func main() {
 					Text:     `<a id="this" href="#">View results...</a>`,
 					OnLinkActivated: func(_ *walk.LinkLabelLink) {
 						OpenUrl(link)
-						//log.Printf("id: '%s', url: '%s'\n", link.Id(), link.URL())
 					},
 					Alignment:  AlignHNearVNear,
 					ColumnSpan: 2,
 					Visible:    false,
-					Enabled:  false,
+					Enabled:    false,
 				},
 				ProgressBar{
 					AssignTo: &uw.pb,
 					MinValue: 0,
-					Value:    50,
-					MaxValue: 100,
-					MaxSize:  Size{Height: 20},
+					//Value:    50,
+					MaxValue:   100,
+					MaxSize:    Size{Height: 20},
 					ColumnSpan: 2,
+					Visible:    false,
 				},
 				VSpacer{
 					ColumnSpan: 2,
@@ -242,18 +234,18 @@ func main() {
 				HSpacer{},
 				LinkLabel{
 					AssignTo: &uw.lnkCancelRescan,
-					Text:     `<a id="this" href="#">Cancel</a>`,
+					Text:     `<a id="this" href="#">Scan</a>`,
 					OnLinkActivated: func(link *walk.LinkLabelLink) {
-						// log.Printf("id: '%s', url: '%s'\n", link.Id(), link.URL())
 						if isScan {
-							log.Printf("stop scan not implemented")
-						} else { 
-							go scan()
+							log.Printf("stopping scan")
+							stop = true
+						} else {
+							go scan(false)
 						}
 					},
 					Alignment: AlignHFarVNear,
 				},
-/* 				LinkLabel{
+				/* 				LinkLabel{
 					Text: `<a id="this" href="#">Settings</a>`,
 					OnLinkActivated: func(link *walk.LinkLabelLink) {
 						settings(uw)
@@ -265,7 +257,7 @@ func main() {
 			},
 		},
 	}
-	if (isFirstStart) {
+	if isFirstStart {
 		MainWindow{
 			AssignTo: &uw.MainWindow,
 			Title:    "Appsitory Updater (Beta)",
@@ -276,7 +268,7 @@ func main() {
 		}.Create()
 	} else {
 		MainWindow{
-			Visible: false,
+			Visible:  false,
 			AssignTo: &uw.MainWindow,
 			Title:    "Appsitory Updater (Beta)",
 			Size:     Size{Width: 420, Height: 200},
@@ -292,9 +284,9 @@ func main() {
 	uw.centerWindow()
 	uw.interceptWndProc()
 
-
-
-	go scan()
+	if isFirstStart {
+		go scan(true)
+	}
 
 	/*go func() {
 		time.Sleep(2 * time.Second)
@@ -321,15 +313,26 @@ func main() {
 	uw.Run()
 }
 
-func scan() {
+func scan(openResults bool) {
 	isScan = true
+	stop = false
 	uw.label.SetText("Scanning computer...")
 	uw.lnkCancelRescan.SetText(`<a id="this" href="#">Cancel</a>`)
 	uw.lnkReadMore.SetVisible(false)
 	uw.pb.SetVisible(true)
 	for i := 0; i < 50; i++ {
 		uw.pb.SetValue(i)
-		time.Sleep(20 * time.Millisecond)
+		if stop {
+			isScan = false
+			uw.pb.SetVisible(false)
+			uw.lnkCancelRescan.SetText(`<a id="this" href="#">Rescan</a>`)
+			uw.lnkReadMore.SetVisible(true)
+			uw.lnkReadMore.SetEnabled(false)
+			uw.lnkReadMore.SetVisible(false)
+			uw.label.SetText("Scan stopped.")
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	var uid string
 	user, err := user.Current()
@@ -338,20 +341,33 @@ func scan() {
 	}
 	log.Printf("user id: %s\r\n", uid)
 	ver, apps := GetVerAndApps()
-	var count int
-	count, link = Update(ver, apps, uid)
 	uw.label.SetText("Sending data for analysis...")
 	uw.pb.SetValue(75)
+	var count int
+	count, link, err = Update(ver, apps, uid)
 	time.Sleep(1 * time.Second)
-	uw.label.SetText("Opening results...")
-	uw.pb.SetValue(99)
-	time.Sleep(1 * time.Second)
+	if err != nil {
+		isScan = false
+		uw.pb.SetVisible(false)
+		uw.lnkCancelRescan.SetText(`<a id="this" href="#">Rescan</a>`)
+		uw.lnkReadMore.SetEnabled(false)
+		uw.lnkReadMore.SetVisible(false)
+		uw.label.SetText("Error connecting to Update Service.")
+		return
+	}
+	if count > 0 && openResults {
+		uw.label.SetText("Opening results...")
+		OpenUrl(link)
+		uw.pb.SetValue(99)
+		time.Sleep(1 * time.Second)
+	} else {
+		uw.pb.SetValue(99)
+		time.Sleep(50 * time.Millisecond)
+	}
 
 	isScan = false
-	
 	uw.pb.SetVisible(false)
 	uw.lnkCancelRescan.SetText(`<a id="this" href="#">Rescan</a>`)
-	uw.lnkReadMore.SetVisible(true)
 	if count > 0 {
 		uw.lnkReadMore.SetEnabled(true)
 		uw.lnkReadMore.SetVisible(true)

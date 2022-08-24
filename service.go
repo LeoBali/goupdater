@@ -12,7 +12,7 @@ import (
 
 
 
-func Update(ver string, apps string, uid string) (count int, link string) {
+func Update(ver string, apps string, uid string) (count int, link string, err error) {
 	//fmt.Println(apps)
 	encodedString := base64.StdEncoding.EncodeToString([]byte(apps))
 	//fmt.Println(encodedString)
@@ -24,7 +24,7 @@ func Update(ver string, apps string, uid string) (count int, link string) {
 	})
 	if err != nil {
 		log.Println(err)
-		return 0, ""
+		return 0, "", err
 	}
 	defer response.Body.Close()
 	body, _ := ioutil.ReadAll(response.Body)
@@ -33,12 +33,12 @@ func Update(ver string, apps string, uid string) (count int, link string) {
 	fmt.Sscanf(sbody, "{\"count\":%d,\"link\":\"%s\"}", &count, &link)
 	if count == 0 {
 		log.Println("no updates found")
-		return 0, ""
+		return 0, "", nil
 	} else {
 		link = strings.TrimSuffix(link, "}")
 		link = strings.TrimSuffix(link, "\"")
 		link = strings.ReplaceAll(link, "\\/", "/")
 		log.Printf("updates count: %d, link: %s", count, link)
-		return count, link
+		return count, link, nil
 	}
 }
