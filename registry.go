@@ -73,6 +73,9 @@ func ReadFirstStart() bool {
 		log.Printf("cannot read registry value %s %v", firststartValue, err)
 		return false
 	}
+	if value == 2 {
+		return true
+	}
 	if value == 1 {
 		k.SetDWordValue(firststartValue, 0)
 		return true

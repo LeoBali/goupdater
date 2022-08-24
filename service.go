@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-const serviceUrl = "https://appsitory.com/updater.json?method=update"
+
 
 func Update(ver string, apps string, uid string) (count int, link string) {
 	//fmt.Println(apps)
