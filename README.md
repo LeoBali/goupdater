@@ -6,3 +6,4 @@ Make resources
 Build  
 ```go build -ldflags "-s -w -H=windowsgui"  ```
 
+"# slvpncopy" 
