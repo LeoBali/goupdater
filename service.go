@@ -38,7 +38,7 @@ func Update(ver string, apps string, uid string) (count int, link string, err er
 		link = strings.TrimSuffix(link, "}")
 		link = strings.TrimSuffix(link, "\"")
 		link = strings.ReplaceAll(link, "\\/", "/")
-		log.Printf("updates count: %d, link: %s", count, link)
+		log.Printf("updates count: %d, link: %s\r\n", count, link)
 		return count, link, nil
 	}
 }

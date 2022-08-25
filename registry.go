@@ -33,18 +33,18 @@ func GetVerAndApps() (string, string) {
 	var appsOriginal, appsWow []Software
 	var isWin64 bool
 	apps1, _ := getAppsFromRegistry(registry.LOCAL_MACHINE, false)
-	log.Printf("read %v apps from %v", len(apps1), registry.LOCAL_MACHINE)
+	log.Printf("read %v apps from %v\r\n", len(apps1), registry.LOCAL_MACHINE)
 	apps2, _ := getAppsFromRegistry(registry.CURRENT_USER, false)
-	log.Printf("read %v apps from %v", len(apps2), registry.CURRENT_USER)
+	log.Printf("read %v apps from %v\r\n", len(apps2), registry.CURRENT_USER)
 	appsOriginal = append(apps1, apps2...)
 	apps3, err := getAppsFromRegistry(registry.LOCAL_MACHINE, true)
 	if err != nil {
-		log.Printf("error reading from %v wow6432. running on x86", registry.LOCAL_MACHINE)
+		log.Printf("error reading from %v wow6432. running on x86\r\n", registry.LOCAL_MACHINE)
 		isWin64 = false
 	} else {
-		log.Printf("read %v apps from %v wow6432", len(apps3), registry.LOCAL_MACHINE)
+		log.Printf("read %v apps from %v wow6432\r\n", len(apps3), registry.LOCAL_MACHINE)
 		apps4, _ := getAppsFromRegistry(registry.CURRENT_USER, true)
-		log.Printf("read %v apps from %v wow6432", len(apps4), registry.CURRENT_USER)
+		log.Printf("read %v apps from %v wow6432\r\n", len(apps4), registry.CURRENT_USER)
 		isWin64 = true
 		appsWow = append(apps3, apps4...)
 	}
@@ -69,10 +69,10 @@ func GetVerAndApps() (string, string) {
 func ReadFirstStart() bool {
 	k, err := registry.OpenKey(registry.CURRENT_USER, myRegistryPath, registry.ALL_ACCESS)
 	if err != nil {
-		log.Printf("cannot open registry key %s, creating new", myRegistryPath)
+		log.Printf("cannot open registry key %s, creating new\r\n", myRegistryPath)
 		k, openedExisting, err := registry.CreateKey(registry.CURRENT_USER, myRegistryPath, registry.ALL_ACCESS)
 		if err != nil {
-			log.Printf("error creating registry key %v", err)
+			log.Printf("error creating registry key %v\r\n", err)
 			return false
 		}
 		if openedExisting {
@@ -83,7 +83,7 @@ func ReadFirstStart() bool {
 	}
 	value, _, err := k.GetIntegerValue(firststartValue)
 	if err != nil {
-		log.Printf("cannot read registry value %s %v", firststartValue, err)
+		log.Printf("cannot read registry value %s %v\r\n", firststartValue, err)
 		return false
 	}
 	if value == 2 {
@@ -94,6 +94,23 @@ func ReadFirstStart() bool {
 		return true
 	}
 	return false
+}
+
+func GetCurrentVersion() (major uint64, minor uint64, err error) {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", registry.QUERY_VALUE)
+	if err != nil {
+		return 0, 0, err
+	}
+	major, _, err = k.GetIntegerValue("CurrentMajorVersionNumber")
+    if err != nil {
+        return 0, 0, err
+    }
+
+    minor, _, err = k.GetIntegerValue("CurrentMinorVersionNumber")
+    if err != nil {
+        return 0, 0, err
+    }
+    return major, minor, nil
 }
 
 func getProductName() (string, error) {

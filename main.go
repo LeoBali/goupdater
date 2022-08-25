@@ -12,20 +12,20 @@ import (
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
-)
 
-//const appIconResID = 7
+	"gopkg.in/toast.v1"
+)
 
 func (mw *UpdaterWindow) addNotifyIcon() {
 	var err error
 	mw.ni, err = walk.NewNotifyIcon(mw)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("error in NewNotifyIcon: %v\r\n", err)
 	}
 
 	mw.SetIcon(icon)
 	mw.ni.SetIcon(icon)
-	mw.ni.SetToolTip("Appsitory Updater")
+	mw.ni.SetToolTip(appsitoryUpdater)
 
 	mw.ni.MessageClicked().Attach(func() {
 		log.Println("balloon clicked")
@@ -187,148 +187,6 @@ func settings() {
 	}.Run(uw)
 }
 
-var icon walk.Image
-var link string
-var uw *UpdaterWindow
-var isScan bool
-var stop bool
-var uid string
-
-func main() {
-	var err error
-	icon, err = walk.Resources.Image("8") // 8 is an icon id
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	isFirstStart := ReadFirstStart()
-	if isFirstStart {
-		log.Println("first start")
-		OpenUrl(firstOpenUrl)
-	} else {
-		log.Println("not a first start")
-		//uw.SetVisible(false)
-	}
-
-	user, err := user.Current()
-	if err == nil {
-		uid = user.Uid
-	}
-	log.Printf("user id: %s\r\n", uid)
-
-	uw = new(UpdaterWindow)
-	children := []Widget{
-		Composite{
-			Layout: Grid{Columns: 2},
-			Children: []Widget{
-				TextLabel{
-					AssignTo:   &uw.label,
-					Text:       "Press Scan to start a scan",
-					ColumnSpan: 2,
-				},
-				VSpacer{
-					ColumnSpan: 2,
-					Size:       8,
-				},
-				LinkLabel{
-					AssignTo: &uw.lnkReadMore,
-					Text:     `<a id="this" href="#">View results...</a>`,
-					OnLinkActivated: func(_ *walk.LinkLabelLink) {
-						OpenUrl(link)
-					},
-					Alignment:  AlignHNearVNear,
-					ColumnSpan: 2,
-					Visible:    false,
-					Enabled:    false,
-				},
-				ProgressBar{
-					AssignTo: &uw.pb,
-					MinValue: 0,
-					//Value:    50,
-					MaxValue:   100,
-					MaxSize:    Size{Height: 20},
-					ColumnSpan: 2,
-					Visible:    false,
-				},
-				VSpacer{
-					ColumnSpan: 2,
-					Size:       16,
-				},
-				HSpacer{},
-				LinkLabel{
-					AssignTo: &uw.lnkCancelRescan,
-					Text:     `<a id="this" href="#">Scan</a>`,
-					OnLinkActivated: func(link *walk.LinkLabelLink) {
-						if isScan {
-							log.Printf("stopping scan")
-							stop = true
-						} else {
-							go scan(false)
-						}
-					},
-					Alignment: AlignHFarVNear,
-				},
-			},
-		},
-	}
-	if isFirstStart {
-		MainWindow{
-			AssignTo: &uw.MainWindow,
-			Title:    "Appsitory Updater (Beta)",
-			Size:     Size{Width: 420, Height: 200},
-			Font:     Font{Family: "Segoe UI", PointSize: 10},
-			Layout:   VBox{},
-			Children: children,
-		}.Create()
-	} else {
-		MainWindow{
-			Visible:  false,
-			AssignTo: &uw.MainWindow,
-			Title:    "Appsitory Updater (Beta)",
-			Size:     Size{Width: 420, Height: 200},
-			Font:     Font{Family: "Segoe UI", PointSize: 10},
-			Layout:   VBox{},
-			Children: children,
-		}.Create()
-	}
-
-	uw.hWnd = uw.Handle()
-	uw.addNotifyIcon()
-	uw.hideButtons()
-	uw.centerWindow()
-	uw.interceptWndProc()
-
-	if isFirstStart {
-		go scan(true)
-	}
-
-	go func() {
-		time.Sleep(1 * time.Minute)
-		log.Println("background check")
-		ver, apps := GetVerAndApps()
-		var count int
-		count, link, err = Update(ver, apps, uid)
-		if err != nil {
-			return
-		}
-		if count > 0 {
-			log.Println("showing balloon")
-			if count == 1 {
-				if err := uw.ni.ShowCustom("We have found one update for your apps", "Click here to view details", icon); err != nil {
-					log.Printf("error showing balloon %v", err)
-				}
-			} else {
-				if err := uw.ni.ShowCustom(fmt.Sprintf("We have found %d updates for your apps", count), "Click here to view details", icon); err != nil {
-					log.Printf("error showing balloon %v", err)
-				}
-			}
-		}
-
-	}()
-
-	uw.Run()
-}
-
 func scan(openResults bool) {
 	isScan = true
 	stop = false
@@ -388,4 +246,219 @@ func scan(openResults bool) {
 		uw.lnkReadMore.SetVisible(false)
 		uw.label.SetText("You don't have any updates available.")
 	}
+}
+
+func notification(title string, message string) {
+	log.Println()
+	if err := uw.ni.ShowCustom(title, message, icon); err != nil {
+		log.Printf("error showing balloon %v\r\n", err)
+	}
+}
+
+func notificationWin10(title string, message string, button string, url string) {
+	log.Printf("pushing toast notification %v %v %v %v\r\n", title, message, button, url)
+	icoFile := GetExecutablePath() + "\\" + updaterIco
+	log.Printf("ico file %v\r\n", icoFile)
+	var notification toast.Notification
+	if FileExists(icoFile) {
+		notification = toast.Notification{
+			AppID:   appsitoryUpdaterBeta,
+			Title:   title,
+			Message: message,
+			Icon:    icoFile,
+			Actions: []toast.Action{
+				{Type: "protocol", Label: button, Arguments: url},
+			},
+			ActivationArguments: url,
+			Duration:            "long",
+		}
+	} else {
+		notification = toast.Notification{
+			AppID:   appsitoryUpdaterBeta,
+			Title:   title,
+			Message: message,
+			Actions: []toast.Action{
+				{Type: "protocol", Label: button, Arguments: url},
+			},
+			ActivationArguments: url,
+			Duration:            "long",
+		}
+	}
+	err := notification.Push()
+	if err != nil {
+		log.Printf("error pushing toast notification: %v\r\n", err)
+	}
+}
+
+const (
+	appsitoryUpdaterBeta = "Appsitory Updater (Beta)"
+	appsitoryUpdater     = "Appsitory Updater"
+	updaterIco           = "updater.ico"
+)
+
+var icon walk.Image
+var link string
+var uw *UpdaterWindow
+var isScan bool
+var stop bool
+var uid string
+var isWin10 bool
+
+func main() {
+	var err error
+	icon, err = walk.Resources.Image("8") // 8 is an icon id
+	if err != nil {
+		log.Printf("error opening icon from resource: %v\r\n", err)
+	}
+
+	isFirstStart := ReadFirstStart()
+	if isFirstStart {
+		log.Println("first start")
+		OpenUrl(firstOpenUrl)
+	} else {
+		log.Println("not a first start")
+	}
+
+	major, minor, err := GetCurrentVersion()
+	if err != nil {
+		log.Printf("error reading current version %s, assuming not win10\r\n", err)
+		isWin10 = false
+	}
+	if major >= 10 {
+		log.Printf("current version %d.%d, assuming win10\r\n", major, minor)
+		isWin10 = true
+	} else {
+		log.Printf("current version %d.%d, assuming not win10\r\n", major, minor)
+		isWin10 = false
+	}
+
+	user, err := user.Current()
+	if err == nil {
+		uid = user.Uid
+	}
+	log.Printf("user id: %s\r\n", uid)
+
+	uw = new(UpdaterWindow)
+	children := []Widget{
+		Composite{
+			Layout: Grid{Columns: 2},
+			Children: []Widget{
+				TextLabel{
+					AssignTo:   &uw.label,
+					Text:       "Press Scan to start a scan",
+					ColumnSpan: 2,
+				},
+				VSpacer{
+					ColumnSpan: 2,
+					Size:       8,
+				},
+				LinkLabel{
+					AssignTo: &uw.lnkReadMore,
+					Text:     `<a id="this" href="#">View results...</a>`,
+					OnLinkActivated: func(_ *walk.LinkLabelLink) {
+						OpenUrl(link)
+					},
+					Alignment:  AlignHNearVNear,
+					ColumnSpan: 2,
+					Visible:    false,
+					Enabled:    false,
+				},
+				ProgressBar{
+					AssignTo: &uw.pb,
+					MinValue: 0,
+					//Value:    50,
+					MaxValue:   100,
+					MaxSize:    Size{Height: 20},
+					ColumnSpan: 2,
+					Visible:    false,
+				},
+				VSpacer{
+					ColumnSpan: 2,
+					Size:       16,
+				},
+				HSpacer{},
+				LinkLabel{
+					AssignTo: &uw.lnkCancelRescan,
+					Text:     `<a id="this" href="#">Scan</a>`,
+					OnLinkActivated: func(link *walk.LinkLabelLink) {
+						if isScan {
+							log.Printf("stopping scan\r\n")
+							stop = true
+						} else {
+							go scan(false)
+						}
+					},
+					Alignment: AlignHFarVNear,
+				},
+			},
+		},
+	}
+	if isFirstStart {
+		MainWindow{
+			AssignTo: &uw.MainWindow,
+			Title:    appsitoryUpdaterBeta,
+			Size:     Size{Width: 420, Height: 200},
+			Font:     Font{Family: "Segoe UI", PointSize: 10},
+			Layout:   VBox{},
+			Children: children,
+		}.Create()
+	} else {
+		MainWindow{
+			Visible:  false,
+			AssignTo: &uw.MainWindow,
+			Title:    appsitoryUpdaterBeta,
+			Size:     Size{Width: 420, Height: 200},
+			Font:     Font{Family: "Segoe UI", PointSize: 10},
+			Layout:   VBox{},
+			Children: children,
+		}.Create()
+	}
+
+	uw.hWnd = uw.Handle()
+	uw.addNotifyIcon()
+	uw.hideButtons()
+	uw.centerWindow()
+	uw.interceptWndProc()
+
+	if isFirstStart {
+		go scan(true)
+	}
+
+	go func() {
+		time.Sleep(1 * time.Minute)
+		log.Println("background check")
+		ver, apps := GetVerAndApps()
+		var count int
+		count, link, err = Update(ver, apps, uid)
+		if err != nil {
+			return
+		}
+		if count > 0 {
+			var title string
+			if count == 1 {
+				title = "We have found one update for your apps"
+			} else {
+				title = fmt.Sprintf("We have found %d updates for your apps", count)
+			}
+			if isWin10 {
+				notificationWin10(title, "Click to view details", "View details", link)
+			} else {
+				notification(title, "Click here to view details")
+			}
+
+			/*log.Println("showing balloon")
+			if count == 1 {
+				if err := uw.ni.ShowCustom("We have found one update for your apps", "Click here to view details", icon); err != nil {
+					log.Printf("error showing balloon %v\r\n", err)
+				}
+			} else {
+				if err := uw.ni.ShowCustom(fmt.Sprintf("We have found %d updates for your apps", count), "Click here to view details", icon); err != nil {
+					log.Printf("error showing balloon %v\r\n", err)
+				}
+			}*/
+		}
+
+	}()
+
+	uw.Run()
 }
