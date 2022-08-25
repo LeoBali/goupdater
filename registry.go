@@ -20,48 +20,46 @@ type Software struct {
 //var apps []Software
 //
 
-func toString(list [] Software) string {
-	var sb strings.Builder
+func logApps(list [] Software) {
 	for _, software := range list {
-		sb.WriteString(software.name + ", ")
+		log.Printf("  %s %s\r\n", software.name, software.version)
 	}
-	return sb.String()
 }
 
 func GetVerAndApps() (string, string) {
 	//var bit string
-	var appsOriginal, appsWow []Software
-	var isWin64 bool
-	apps1, _ := getAppsFromRegistry(registry.LOCAL_MACHINE, false)
-	log.Printf("read %v apps from %v\r\n", len(apps1), registry.LOCAL_MACHINE)
-	apps2, _ := getAppsFromRegistry(registry.CURRENT_USER, false)
-	log.Printf("read %v apps from %v\r\n", len(apps2), registry.CURRENT_USER)
-	appsOriginal = append(apps1, apps2...)
-	apps3, err := getAppsFromRegistry(registry.LOCAL_MACHINE, true)
-	if err != nil {
-		log.Printf("error reading from %v wow6432. running on x86\r\n", registry.LOCAL_MACHINE)
-		isWin64 = false
-	} else {
-		log.Printf("read %v apps from %v wow6432\r\n", len(apps3), registry.LOCAL_MACHINE)
-		apps4, _ := getAppsFromRegistry(registry.CURRENT_USER, true)
-		log.Printf("read %v apps from %v wow6432\r\n", len(apps4), registry.CURRENT_USER)
-		isWin64 = true
-		appsWow = append(apps3, apps4...)
+	var appsX86, appsX64 []Software
+	is64 := GetCPUArch()
+	log.Printf("cpu architecture 64: %v", is64)
+	log.Printf("x86 apps:")
+	apps1, _ := getAppsFromRegistry(registry.LOCAL_MACHINE, true)
+	log.Printf("read %v apps from HKLM\r\n", len(apps1))
+	logApps(apps1)
+	apps2, _ := getAppsFromRegistry(registry.CURRENT_USER, true)
+	log.Printf("read %v apps from HKCU\r\n", len(apps2))
+	logApps(apps2)
+	appsX86 = append(apps1, apps2...)
+	if is64 {
+		apps3, _ := getAppsFromRegistry(registry.LOCAL_MACHINE, false)
+		log.Printf("read %v apps from HKLM 64\r\n", len(apps3))
+		logApps(apps3)
+		apps4, _ := getAppsFromRegistry(registry.CURRENT_USER, false)
+		log.Printf("read %v apps from HKCU 64\r\n", len(apps4))
+		logApps(apps4)
+		appsX64 = append(apps3, apps4...)
 	}
+
 	var sb strings.Builder
 	productName, _ := getProductName()
-	if isWin64 {
-		for _, app := range appsOriginal {
-			sb.WriteString(fmt.Sprintf("%s;;%s;;64\r\n", app.name, app.version))
-		}
-		for _, app := range appsWow {
-			sb.WriteString(fmt.Sprintf("%s;;%s;;0\r\n", app.name, app.version))
-		}
+	for _, app := range appsX86 {
+		sb.WriteString(fmt.Sprintf("%s;;%s;;0\r\n", app.name, app.version))
+	}
+	for _, app := range appsX64 {
+		sb.WriteString(fmt.Sprintf("%s;;%s;;64\r\n", app.name, app.version))
+	}
+	if is64 {
 		return fmt.Sprintf("%s;%s", productName, "64"), sb.String()
 	} else {
-		for _, app := range appsOriginal {
-			sb.WriteString(fmt.Sprintf("%s;;%s;;0\r\n", app.name, app.version))
-		}
 		return fmt.Sprintf("%s;%s", productName, "32"), sb.String()
 	}
 }
@@ -96,6 +94,29 @@ func ReadFirstStart() bool {
 	return false
 }
 
+func GetCPUArch() (is64 bool) {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment", registry.QUERY_VALUE)
+	if err == nil {
+		val, _, err := k.GetStringValue("PROCESSOR_ARCHITECTURE")
+		if err == nil {
+			if strings.Contains(val, "AMD64") { return true }
+			if strings.Contains(val, "x86") { return false }
+		}
+	}
+	k, err = registry.OpenKey(registry.LOCAL_MACHINE, "HARDWARE\\DESCRIPTION\\SYSTEM\\CENTERALPROCESSOR\\0", registry.QUERY_VALUE)
+	if err == nil {
+		val, _, err := k.GetStringValue("Identifier")
+		if err == nil {
+			if strings.Contains(val, "Intel64") { return true }
+			if strings.Contains(val, "x64") { return true }
+			if strings.Contains(val, "Intel32") { return false }
+			if strings.Contains(val, "x86") { return false }
+		}
+	}
+	fmt.Println("cannot detect CPU architecture")
+	return false
+}
+
 func GetCurrentVersion() (major uint64, minor uint64, err error) {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", registry.QUERY_VALUE)
 	if err != nil {
@@ -122,17 +143,15 @@ func getProductName() (string, error) {
 	return val, err
 }
 
-func getAppsFromRegistry(hive registry.Key, wow6432 bool) (apps []Software, err error) {
+func getAppsFromRegistry(hive registry.Key, x86 bool) (apps []Software, err error) {
 	var k registry.Key
-	if wow6432 {
-		log.Println(uninstallRegistryPath6432)
-		k, err = registry.OpenKey(hive, uninstallRegistryPath6432, registry.ENUMERATE_SUB_KEYS)
+	if x86 {
+		k, err = registry.OpenKey(hive, uninstallRegistryPath6432, registry.ENUMERATE_SUB_KEYS | registry.WOW64_32KEY)
 	} else {
-		log.Println(uninstallRegistryPath)
-		k, err = registry.OpenKey(hive, uninstallRegistryPath, registry.ENUMERATE_SUB_KEYS)
+		k, err = registry.OpenKey(hive, uninstallRegistryPath, registry.ENUMERATE_SUB_KEYS | registry.WOW64_64KEY)
 	}
 	if err != nil {
-		return nil, err
+		return make([]Software, 0), err
 	}
 	defer k.Close()
 	keys, _ := k.ReadSubKeyNames(0)
@@ -140,10 +159,10 @@ func getAppsFromRegistry(hive registry.Key, wow6432 bool) (apps []Software, err 
 		var key registry.Key
 		var softwareName, softwareVersion, systemComponent string
 		var iSystemComponent uint64
-		if wow6432 {
-			key, err = registry.OpenKey(hive, uninstallRegistryPath6432+"\\"+name, registry.QUERY_VALUE)
+		if x86 {
+			key, err = registry.OpenKey(hive, uninstallRegistryPath6432+"\\"+name, registry.QUERY_VALUE | registry.WOW64_32KEY)
 		} else {
-			key, err = registry.OpenKey(hive, uninstallRegistryPath+"\\"+name, registry.QUERY_VALUE)
+			key, err = registry.OpenKey(hive, uninstallRegistryPath+"\\"+name, registry.QUERY_VALUE | registry.WOW64_64KEY)
 		}
 		if err != nil {
 			goto close
@@ -153,7 +172,7 @@ func getAppsFromRegistry(hive registry.Key, wow6432 bool) (apps []Software, err 
 			goto close
 		}
 		softwareVersion, _, _ = key.GetStringValue("DisplayVersion")
-		softwareVersion = "1.0.0"
+		//softwareVersion = "1.0.0"
 		if strings.Contains(softwareName, " (KB") {
 			goto close
 		}

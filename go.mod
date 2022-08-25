@@ -1,4 +1,4 @@
-module updater
+module appsitory
 
 go 1.19
 
@@ -10,9 +10,7 @@ require (
 )
 
 require (
-	github.com/akavel/rsrc v0.10.2 // indirect
-	github.com/dselans/dmidecode v0.0.0-20180814053009-65c3f9d81910 // indirect
 	github.com/lxn/walk v0.0.0-20210112085537-c389da54e794
-	github.com/lxn/win v0.0.0-20210218163916-a377121e959e // indirect
+	github.com/lxn/win v0.0.0-20210218163916-a377121e959e
 	gopkg.in/toast.v1 v1.0.0-20180812000517-0a84660828b2
 )

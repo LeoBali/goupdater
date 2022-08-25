@@ -425,7 +425,7 @@ func main() {
 	}
 
 	go func() {
-		time.Sleep(1 * time.Minute)
+		time.Sleep(1 * time.Hour)
 		log.Println("background check")
 		ver, apps := GetVerAndApps()
 		var count int
