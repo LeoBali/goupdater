@@ -29,6 +29,7 @@ func (mw *UpdaterWindow) addNotifyIcon() {
 
 	mw.ni.MessageClicked().Attach(func() {
 		log.Println("balloon clicked")
+		setOnTop(false)
 		OpenUrl(link)
 	})
 
@@ -44,7 +45,7 @@ func (mw *UpdaterWindow) addNotifyIcon() {
 	scanForUpdates.Triggered().Attach(func() {
 		mw.Show()
 		win.ShowWindow(mw.Handle(), win.SW_RESTORE)
-		go scan(false)
+		go scan(false, false)
 	})
 	mw.ni.ContextMenu().Actions().Add(scanForUpdates)
 
@@ -91,6 +92,7 @@ func (uw *UpdaterWindow) interceptWndProc() {
 	prevWndProcPtr = win.SetWindowLongPtr(uw.hWnd, win.GWL_WNDPROC,
 		syscall.NewCallback(func(hWnd win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 			if msg == win.WM_CLOSE {
+				setOnTop(false)
 				win.ShowWindow(hWnd, win.SW_HIDE)
 				return 0
 			} else if msg == win.WM_APP+0 {
@@ -136,9 +138,11 @@ type UpdaterWindow struct {
 	lnkCancelRescan *walk.LinkLabel
 	lnkReadMore     *walk.LinkLabel
 	//lnkRescan   *walk.LinkLabel
+	cbAutorun *walk.CheckBox
 }
 
 func settings() {
+	autorun, _ := GetAutorun()
 	Dialog{
 		FixedSize: true,
 		Icon:      icon,
@@ -175,9 +179,18 @@ func settings() {
 				Children: []Widget{
 					CheckBox{
 						Text:      "Run Software Update when Windows starts",
-						Checked:   true,
+						Checked:   autorun,
+						AssignTo:  &uw.cbAutorun,
 						Alignment: AlignHNearVCenter,
 						MinSize:   Size{Width: 400},
+						OnCheckedChanged: func() {
+							value := uw.cbAutorun.Checked()
+							log.Printf("checked changed value: %v", value)
+							err := SetAutorun(value)
+							if err != nil {
+								log.Printf("error %v", err)
+							}
+						},
 					},
 				},
 				MinSize:   Size{Width: 400},
@@ -187,7 +200,7 @@ func settings() {
 	}.Run(uw)
 }
 
-func scan(openResults bool) {
+func scan(openWebResults bool, isFirstStart bool) {
 	isScan = true
 	stop = false
 	uw.label.SetText("Scanning computer...")
@@ -224,7 +237,7 @@ func scan(openResults bool) {
 		uw.label.SetText("Error connecting to Update Service.")
 		return
 	}
-	if count > 0 && openResults {
+	if count > 0 && openWebResults {
 		uw.label.SetText("Opening results...")
 		OpenUrl(link)
 		uw.pb.SetValue(99)
@@ -241,10 +254,32 @@ func scan(openResults bool) {
 		uw.lnkReadMore.SetEnabled(true)
 		uw.lnkReadMore.SetVisible(true)
 		uw.label.SetText(fmt.Sprintf("You have %v new updates available.", count))
+		if isFirstStart {
+			// 5. При первом запуске мы также запускаем скан с окном и по завершению скана http://joxi.ru/vAWvLYjURwxMa2 -
+			// вот это окно выводим поверх остальных окон. Также паралельно с этим выводим балун который мы используем.
+			//То есть дублируем и в окне и в балуне.
+			// Страницу с результатами( https://appsitory.com/update/?....) автоматом НЕ открываем, открываем только либо по клику на балуне либо на View result.
+			setOnTop(true)
+			balloon(count, link)
+		}
 	} else {
 		uw.lnkReadMore.SetEnabled(false)
 		uw.lnkReadMore.SetVisible(false)
 		uw.label.SetText("You don't have any updates available.")
+	}
+}
+
+func balloon(count int, link string) {
+	var title string
+	if count == 1 {
+		title = "We have found one update for your apps"
+	} else {
+		title = fmt.Sprintf("We have found %d updates for your apps", count)
+	}
+	if isWin10 {
+		notificationWin10(title, "Click to view details", "View details", link)
+	} else {
+		notification(title, "Click here to view details")
 	}
 }
 
@@ -262,7 +297,7 @@ func notificationWin10(title string, message string, button string, url string) 
 	var notification toast.Notification
 	if FileExists(icoFile) {
 		notification = toast.Notification{
-			AppID:   appsitoryUpdaterBeta,
+			AppID:   appsitoryUpdater,
 			Title:   title,
 			Message: message,
 			Icon:    icoFile,
@@ -274,7 +309,7 @@ func notificationWin10(title string, message string, button string, url string) 
 		}
 	} else {
 		notification = toast.Notification{
-			AppID:   appsitoryUpdaterBeta,
+			AppID:   appsitoryUpdater,
 			Title:   title,
 			Message: message,
 			Actions: []toast.Action{
@@ -290,10 +325,32 @@ func notificationWin10(title string, message string, button string, url string) 
 	}
 }
 
+func setOnTop(value bool) {
+	if value {
+		log.Println("setting topmost window")
+		/*var rect win.RECT
+		win.GetWindowRect(uw.hWnd, &rect)
+		win.SetWindowPos(uw.hWnd, // handle to window
+			win.HWND_TOPMOST,     // placement-order handle
+			rect.Left,            // horizontal position
+			rect.Top,             // vertical position
+			rect.Right-rect.Left, // width
+			rect.Bottom-rect.Top, // height
+			win.SWP_SHOWWINDOW)*/
+		win.SetWindowPos(uw.hWnd,
+			win.HWND_TOPMOST, 0, 0, 0, 0,
+			win.SWP_NOMOVE|win.SWP_NOSIZE)
+	} else {
+		log.Println("unsetting topmost window")
+		win.SetWindowPos(uw.hWnd,
+			win.HWND_NOTOPMOST, 0, 0, 0, 0,
+			win.SWP_NOMOVE|win.SWP_NOSIZE)
+	}
+}
+
 const (
-	appsitoryUpdaterBeta = "Appsitory Updater (Beta)"
-	appsitoryUpdater     = "Appsitory Updater"
-	updaterIco           = "updater.ico"
+	appsitoryUpdater = "Appsitory Updater"
+	updaterIco       = "updater.ico"
 )
 
 var icon walk.Image
@@ -314,7 +371,8 @@ func main() {
 	isFirstStart := ReadFirstStart()
 	if isFirstStart {
 		log.Println("first start")
-		OpenUrl(firstOpenUrl)
+		// 20221001 - При первом запуске(значение ключа firststart равно 1) убираем открытие https://appsitory.com/?utm_source=updater_1.0
+		//OpenUrl(firstOpenUrl)
 	} else {
 		log.Println("not a first start")
 	}
@@ -325,7 +383,7 @@ func main() {
 		isWin10 = false
 	}
 	if major >= 10 {
-		log.Printf("current version %d.%d, assuming win10\r\n", major, minor)
+		log.Printf("current version %d.%d, assuming >=win10\r\n", major, minor)
 		isWin10 = true
 	} else {
 		log.Printf("current version %d.%d, assuming not win10\r\n", major, minor)
@@ -356,6 +414,7 @@ func main() {
 					AssignTo: &uw.lnkReadMore,
 					Text:     `<a id="this" href="#">View results...</a>`,
 					OnLinkActivated: func(_ *walk.LinkLabelLink) {
+						setOnTop(false)
 						OpenUrl(link)
 					},
 					Alignment:  AlignHNearVNear,
@@ -385,7 +444,7 @@ func main() {
 							log.Printf("stopping scan\r\n")
 							stop = true
 						} else {
-							go scan(false)
+							go scan(false, false)
 						}
 					},
 					Alignment: AlignHFarVNear,
@@ -394,9 +453,10 @@ func main() {
 		},
 	}
 	if isFirstStart {
+		// visible should be empty (not true or false or null) here
 		MainWindow{
 			AssignTo: &uw.MainWindow,
-			Title:    appsitoryUpdaterBeta,
+			Title:    appsitoryUpdater,
 			Size:     Size{Width: 420, Height: 200},
 			Font:     Font{Family: "Segoe UI", PointSize: 10},
 			Layout:   VBox{},
@@ -406,7 +466,7 @@ func main() {
 		MainWindow{
 			Visible:  false,
 			AssignTo: &uw.MainWindow,
-			Title:    appsitoryUpdaterBeta,
+			Title:    appsitoryUpdater,
 			Size:     Size{Width: 420, Height: 200},
 			Font:     Font{Family: "Segoe UI", PointSize: 10},
 			Layout:   VBox{},
@@ -421,11 +481,13 @@ func main() {
 	uw.interceptWndProc()
 
 	if isFirstStart {
-		go scan(true)
+		// Страницу с результатами( https://appsitory.com/update/?....) автоматом НЕ открываем
+		//go scan(true)
+		go scan(false, true)
 	}
 
 	go func() {
-		time.Sleep(1 * time.Hour)
+		time.Sleep(30 * time.Minute)
 		log.Println("background check")
 		ver, apps := GetVerAndApps()
 		var count int
@@ -434,28 +496,7 @@ func main() {
 			return
 		}
 		if count > 0 {
-			var title string
-			if count == 1 {
-				title = "We have found one update for your apps"
-			} else {
-				title = fmt.Sprintf("We have found %d updates for your apps", count)
-			}
-			if isWin10 {
-				notificationWin10(title, "Click to view details", "View details", link)
-			} else {
-				notification(title, "Click here to view details")
-			}
-
-			/*log.Println("showing balloon")
-			if count == 1 {
-				if err := uw.ni.ShowCustom("We have found one update for your apps", "Click here to view details", icon); err != nil {
-					log.Printf("error showing balloon %v\r\n", err)
-				}
-			} else {
-				if err := uw.ni.ShowCustom(fmt.Sprintf("We have found %d updates for your apps", count), "Click here to view details", icon); err != nil {
-					log.Printf("error showing balloon %v\r\n", err)
-				}
-			}*/
+			balloon(count, link)
 		}
 
 	}()

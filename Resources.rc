@@ -7,11 +7,11 @@ VS_VERSION_INFO VERSIONINFO
         BLOCK "040904b0"
         {
             VALUE "CompanyName",        "Appsitory\0"
-            VALUE "FileDescription",    "Appsitory Updater (Beta)\0"
+            VALUE "FileDescription",    "Appsitory Updater\0"
             VALUE "FileVersion",        "1.0.0.0\0"
             VALUE "LegalCopyright",     "© 2022 Appsitory. All Rights Reserved\0"
-            VALUE "OriginalFilename",   "Appsitory Updater (Beta)\0"
-            VALUE "ProductName",        "Appsitory Updater (Beta)\0"
+            VALUE "OriginalFilename",   "Appsitory Updater\0"
+            VALUE "ProductName",        "Appsitory Updater\0"
             VALUE "ProductVersion",     "1.0.0.0\0"
         }
     }
